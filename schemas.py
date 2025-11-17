@@ -1,6 +1,7 @@
 from pydantic import BaseModel, ConfigDict
-from typing import List, Optional
-from datetime import datetime
+from typing import List, Optional, Dict, Any
+from datetime import datetime, date
+from enum import Enum
 
 
 # Completed Session Schemas
@@ -194,5 +195,60 @@ class ProgressHistoryResponse(ProgressHistoryBase):
     updated_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
+
+
+# Store Items Schemas
+class UserStoreItemsBase(BaseModel):
+    treats: int = 0
+    streak_freezes: int = 0
+    streak_revivers: int = 0
+    # ✅ NEW: Streak freeze date
+    active_freeze_date: Optional[date] = None
+    # ✅ NEW: History of all freeze dates used (list of ISO date strings)
+    used_freezes: List[str] = []
+    # ✅ NEW: Streak reviver date
+    active_streak_reviver: Optional[date] = None
+    # ✅ NEW: History of all reviver dates used (list of ISO date strings)
+    used_revivers: List[str] = []
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class UserStoreItemsResponse(UserStoreItemsBase):
+    id: int
+    user_id: int
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class UserStoreItemsUpdate(BaseModel):
+    treats: Optional[int] = None
+    streak_freezes: Optional[int] = None
+    streak_revivers: Optional[int] = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+# Purchase Verification Schemas
+class VerifyTreatPurchaseRequest(BaseModel):
+    product_id: str
+    package_identifier: str
+    treat_amount: int
+    transaction_id: str
+    original_transaction_id: str
+    purchase_date: str
+    revenue_cat_user_id: str
+    platform: str  # 'ios' or 'android'
+
+
+class VerifyTreatPurchaseResponse(BaseModel):
+    success: bool
+    treats: int
+    message: Optional[str] = None
+
+    model_config = ConfigDict(from_attributes=True)
+
 
 # Saved Filters Schemas
