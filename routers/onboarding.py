@@ -104,14 +104,11 @@ def format_session_for_frontend(session, db: Session, user_id: int) -> Dict[str,
 
 @router.post("/api/onboarding")
 async def create_onboarding_with_generated_session(player_info: OnboardingData, db: Session = Depends(get_db)):
+    # TEST: Temporary error to test Sentry - REMOVE THIS LINE AFTER TESTING
+    raise ValueError("TEST ERROR: Onboarding intentionally failed to test Sentry error tracking")
+    
     # Log received data for debugging
     logger.info(f"Received onboarding data: {player_info}")
-    
-    # TEST: Simulate hidden parse error (data model/database mismatch) - comment out after testing Sentry
-    # Simulates: Code expects field that was removed/changed in model update - AttributeError
-    # This mimics real-world scenarios where schema changes cause silent failures during data parsing
-    # Example: Old code accessed player_info.metadata.settings, but metadata field was removed
-    parse_error = player_info.metadata.settings.get('version')  # AttributeError: 'OnboardingData' has no attribute 'metadata'
     
     # queries through the db to find user
     existing_user = db.query(User).filter(User.email == player_info.email).first()

@@ -16,7 +16,7 @@ if sentry_dsn:
         dsn=sentry_dsn,
         # Set traces_sample_rate to 1.0 to capture 100% of transactions for performance monitoring
         # Reduce this value in production if you want to reduce performance data volume
-        traces_sample_rate=1.0
+        traces_sample_rate=1.0,
         # Enable sending default PII (personally identifiable information) like user IP
         send_default_pii=True,
         # Set environment (staging, production, etc.)
