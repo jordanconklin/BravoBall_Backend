@@ -41,6 +41,13 @@ app.include_router(custom_drills.router)
 app.include_router(store.router)
 
 
+# Test endpoint for Sentry error tracking
+@app.get("/sentry-debug")
+async def trigger_error():
+    """Test endpoint to verify Sentry is working - intentionally throws an error"""
+    division_by_zero = 1 / 0
+
+
 # Run FastAPI on local host
 if __name__ == "__main__":
     import uvicorn
