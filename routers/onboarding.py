@@ -104,8 +104,6 @@ def format_session_for_frontend(session, db: Session, user_id: int) -> Dict[str,
 
 @router.post("/api/onboarding")
 async def create_onboarding_with_generated_session(player_info: OnboardingData, db: Session = Depends(get_db)):
-    # TEST: Temporary error to test Sentry - REMOVE THIS LINE AFTER TESTING
-    raise ValueError("TEST ERROR: Onboarding intentionally failed to test Sentry error tracking")
     
     # Log received data for debugging
     logger.info(f"Received onboarding data: {player_info}")
