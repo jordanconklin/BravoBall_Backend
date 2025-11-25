@@ -18,7 +18,7 @@ if sentry_dsn:
         # Reduce this value in production if you want to reduce performance data volume
         traces_sample_rate=1.0,
         # Enable sending default PII (personally identifiable information) like user IP
-        send_default_pii=False,
+        send_default_pii=True,
         # Set environment (staging, production, etc.)
         environment=os.getenv("ENVIRONMENT", "production"),
     )
