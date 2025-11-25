@@ -107,9 +107,11 @@ async def create_onboarding_with_generated_session(player_info: OnboardingData, 
     # Log received data for debugging
     logger.info(f"Received onboarding data: {player_info}")
     
-    # TEST: Simulate parse error - comment out next line after testing Sentry
-    import json
-    test_parse_error = json.loads(player_info.email)  # Will fail if email is not valid JSON
+    # TEST: Simulate hidden parse error (data model/database mismatch) - comment out after testing Sentry
+    # Simulates: Code expects field that was removed/changed in model update - AttributeError
+    # This mimics real-world scenarios where schema changes cause silent failures during data parsing
+    # Example: Old code accessed player_info.metadata.settings, but metadata field was removed
+    parse_error = player_info.metadata.settings.get('version')  # AttributeError: 'OnboardingData' has no attribute 'metadata'
     
     # queries through the db to find user
     existing_user = db.query(User).filter(User.email == player_info.email).first()
