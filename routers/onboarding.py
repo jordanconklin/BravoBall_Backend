@@ -107,6 +107,10 @@ async def create_onboarding_with_generated_session(player_info: OnboardingData, 
     # Log received data for debugging
     logger.info(f"Received onboarding data: {player_info}")
     
+    # TEST: Simulate parse error - comment out next line after testing Sentry
+    import json
+    test_parse_error = json.loads(player_info.email)  # Will fail if email is not valid JSON
+    
     # queries through the db to find user
     existing_user = db.query(User).filter(User.email == player_info.email).first()
 
