@@ -1,7 +1,8 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from typing import List, Optional, Dict, Any
-from models import User, SessionPreferences, OnboardingData, SessionResponse, DrillResponse
+from models import User, SessionPreferences, OnboardingData, SessionResponse, DrillResponse, Drill
+from utils.drill_scorer import DrillScorer
 from db import get_db
 from auth import get_current_user
 from services.session_generator import SessionGenerator
@@ -254,7 +255,10 @@ def format_session_for_frontend(session, db: Session, user_id: int) -> Dict[str,
                     "sub_skill": sub_skill
                 },
                 "video_url": drill.video_url,
-                "is_custom": is_custom  # ✅ Add is_custom field
+                "is_custom": is_custom,  # ✅ Add is_custom field
+                # Diagnostics: freshness and adjusted total score (if available)
+                "freshness_multiplier": getattr(session, '_drill_scores', {}).get(str(drill.uuid), {}).get('freshness_multiplier'),
+                "total_score": getattr(session, '_drill_scores', {}).get(str(drill.uuid), {}).get('total_score')
             }
             drills.append(drill_data)
 
@@ -276,6 +280,52 @@ def format_session_for_frontend(session, db: Session, user_id: int) -> Dict[str,
         "focus_areas": focus_areas,
         "drills": drills
     }
+
+
+@router.get("/api/session/debug_scores")
+async def debug_session_scores(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Return recency map and adjusted drill scores for debugging/testing."""
+    try:
+        # Get preferences or create temp preferences
+        prefs = db.query(SessionPreferences).filter(SessionPreferences.user_id == current_user.id).first()
+        if not prefs:
+            class TempPrefs:
+                def __init__(self):
+                    self.user_id = current_user.id
+                    self.duration = 30
+                    self.available_equipment = current_user.available_equipment or ["ball"]
+                    self.training_style = "medium_intensity"
+                    self.training_location = "full_field"
+                    self.difficulty = "beginner"
+                    self.target_skills = []
+            prefs = TempPrefs()
+
+        gen = SessionGenerator(db)
+        recency_map = gen._compute_recent_drill_recency_map(current_user.id)
+
+        # Rank drills and apply freshness penalty to see adjusted scores
+        all_drills = db.query(Drill).all()
+        scorer = DrillScorer(prefs)
+        ranked = scorer.rank_drills(all_drills)
+        adjusted = gen._apply_freshness_penalty(ranked, recency_map)
+
+        top = []
+        for rd in adjusted[:50]:
+            d = rd.get('drill')
+            top.append({
+                'uuid': str(getattr(d, 'uuid', None)),
+                'title': getattr(d, 'title', None),
+                'total_score': rd.get('total_score'),
+                'freshness_multiplier': rd.get('freshness_multiplier', 1.0)
+            })
+
+        return {'recency_map': recency_map, 'top_drills': top}
+    except Exception as e:
+        logger.error(f"Error in debug_session_scores: {e}")
+        raise
 
 # ✅ NEW: Public session generation for guest users
 @router.post("/public/session/generate")

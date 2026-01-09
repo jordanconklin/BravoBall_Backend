@@ -79,7 +79,10 @@ def format_session_for_frontend(session, db: Session, user_id: int) -> Dict[str,
                     "sub_skill": sub_skill
                 },
                 "video_url": drill.video_url,
-                "is_custom": is_custom  # ✅ Add is_custom field
+                "is_custom": is_custom,  # ✅ Add is_custom field
+                # Optional scoring diagnostics (transient, for debugging/testing)
+                "freshness_multiplier": getattr(session, '_drill_scores', {}).get(str(drill.uuid), {}).get('freshness_multiplier'),
+                "total_score": getattr(session, '_drill_scores', {}).get(str(drill.uuid), {}).get('total_score')
             }
             drills.append(drill_data)
 

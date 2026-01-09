@@ -26,6 +26,8 @@ from models import (
 from typing import List, Dict
 from utils.drill_scorer import DrillScorer
 from config import get_logger
+from models import CompletedSession
+from datetime import datetime, timedelta
 
 logger = get_logger(__name__)
 
@@ -68,10 +70,11 @@ class SessionGenerator:
             
         The generation process involves:
         1. Retrieving and scoring all available drills
-        2. Creating a larger pool of top-ranked drills
-        3. Balancing drill selection to match user's skill preferences proportionally
-        4. Adjusting drill durations to fit session constraints
-        5. Normalizing the overall session duration
+        2. Applying freshness penalties based on recent drill completions
+        3. Creating a larger pool of top-ranked drills
+        4. Balancing drill selection to match user's skill preferences proportionally
+        5. Adjusting drill durations to fit session constraints
+        6. Normalizing the overall session duration
         """
         # Get and rank all available drills
         all_drills = self.db.query(Drill).all()
@@ -79,6 +82,11 @@ class SessionGenerator:
 
         scorer = DrillScorer(preferences)
         ranked_drills = scorer.rank_drills(all_drills)
+
+        # Apply freshness penalty based on drills completed in the last 14 days
+        if preferences.user_id:
+            recency_map = self._compute_recent_drill_recency_map(preferences.user_id)
+            ranked_drills = self._apply_freshness_penalty(ranked_drills, recency_map)
         
         # Determine max drills for this session duration
         max_drills = self.DURATION_TO_MAX_DRILLS.get(preferences.duration, 4)
@@ -97,6 +105,19 @@ class SessionGenerator:
         suitable_drills = []
         current_duration = 0
         has_limited_equipment = len(preferences.available_equipment) <= 1
+
+        # Collect scoring details for selected drills so we can expose them later
+        drill_score_map: Dict[str, Dict] = {}
+        for rd in selected_drills:
+            try:
+                d = rd.get('drill')
+                uuid = str(getattr(d, 'uuid', None))
+                drill_score_map[uuid] = {
+                    'total_score': float(rd.get('total_score', rd.get('scores', {}).get('total', 0.0))),
+                    'freshness_multiplier': float(rd.get('freshness_multiplier', 1.0))
+                }
+            except Exception:
+                continue
 
         # Process the balanced selection of drills
         for ranked_drill in selected_drills:
@@ -479,3 +500,89 @@ class SessionGenerator:
                 logger.info(f"Skill category '{category}' has {skill_counts[category]} sub-skills")
         
         return skill_counts
+
+    def _compute_recent_drill_recency_map(self, user_id: int) -> Dict[str, float]:
+        """
+        Calculate the recency score from user's completed drills within 14 days.
+        Args:
+            user_id: ID of the user
+
+        Returns:
+            Dictionary mapping drill UUIDs to recency weights
+        """
+        recency_map: Dict[str, float] = {}
+        try:
+            window_days = 14
+            cutoff = datetime.now() - timedelta(days=window_days)
+            sessions = self.db.query(CompletedSession).filter(
+                CompletedSession.user_id == user_id,
+                CompletedSession.date >= cutoff
+            ).all()
+
+            for session in sessions:
+                # Compute days ago; allow fractional days but limit to [0, window_days)
+                if not session.date:
+                    continue
+                days_ago = (datetime.now() - session.date).days
+                if days_ago >= window_days:
+                    continue
+                weight = max(0.0, (window_days - days_ago) / float(window_days))
+                drills = session.drills or []
+                for entry in drills:
+                    # entry may be dict with nested drill info
+                    try:
+                        drill_uuid = None
+                        if isinstance(entry, dict):
+                            if 'drill' in entry and 'uuid' in entry['drill']:
+                                drill_uuid = str(entry['drill']['uuid'])
+                        if not drill_uuid:
+                            continue
+                        recency_map[drill_uuid] = recency_map.get(drill_uuid, 0.0) + weight
+                    except Exception:
+                        continue
+        except Exception:
+            # Fail silently and return empty map on error
+            return {}
+
+        return recency_map
+
+    def _apply_freshness_penalty(self, ranked_drills: List[Dict], recency_map: Dict[str, float]) -> List[Dict]:
+        """
+        Apply a penalty multiplier to ranked drills based on recency_map.
+        The multiplier is in [MIN_MULTIPLIER, 1.0], where MIN_MULTIPLIER is the
+        worst-case (most penalized). recency_map values are summed weights per drill.
+        We normalize recency_score to [0,1] by capping at `max_norm` (defaults to 3 completions),
+        then compute multiplier = 1 - normalized_score * (1 - MIN_MULTIPLIER).
+        Args:
+            ranked_drills: List of drills with their scores
+            recency_map: Mapping of drill UUIDs to recency weights
+        
+        Returns:
+            List of ranked drills sorted by highest score 
+        """
+        if not recency_map:
+            return ranked_drills
+
+        MIN_MULTIPLIER = 0.6  # Minimum multiplier after heavy recent repetition
+        MAX_NORM = 3.0  # Number of equivalent recent completions to reach full penalty
+
+        for rd in ranked_drills:
+            try:
+                drill = rd.get('drill')
+                drill_uuid = str(getattr(drill, 'uuid', None))
+                recency_score = recency_map.get(drill_uuid, 0.0)
+                normalized = min(recency_score / MAX_NORM, 1.0) # Normalize to [0,1]
+                multiplier = 1.0 - normalized * (1.0 - MIN_MULTIPLIER)
+                # Apply multiplier to the total score and preserve detailed scores
+                rd['total_score'] = rd.get('total_score', 0.0) * multiplier
+                rd.setdefault('freshness_multiplier', multiplier)
+                
+                logger.info(f" Freshness: drill={getattr(drill, 'title', drill_uuid)} "
+                f"recency={recency_score:.2f} normalized={normalized:.2f} "
+                f"multiplier={multiplier:.2f} total={rd['total_score']:.3f}")
+
+            except Exception:
+                rd.setdefault('freshness_multiplier', 1.0)
+
+        # Re-sort by the adjusted total_score
+        return sorted(ranked_drills, key=lambda x: x['total_score'], reverse=True)

@@ -13,7 +13,7 @@ import sys
 from pathlib import Path
 import pytest
 from datetime import datetime
-from ..config import get_logger
+from config import get_logger
 
 logger = get_logger(__name__)
 
@@ -168,6 +168,44 @@ async def test_session_generation():
                 )
     finally:
         db.close()
+    
+def test_freshness_penalty_reduces_repeated_drill_score():
+    generator = SessionGenerator(db=None)
+
+    class DummyDrill:
+        def __init__(self, uuid, title):
+            self.uuid = uuid
+            self.title = title
+
+    drill_a = DummyDrill("drill-a", "Passing Drill")
+    drill_b = DummyDrill("drill-b", "Dribbling Drill")
+
+    ranked_drills = [
+        {"drill": drill_a, "total_score": 10.0},
+        {"drill": drill_b, "total_score": 9.8},
+    ]
+
+    # Simulate drill A being repeated recently 3 times
+    recency_map = {
+        "drill-a": 3.0  # max penalty
+    }
+
+    adjusted = generator._apply_freshness_penalty(ranked_drills, recency_map)
+
+    a = None
+    b = None
+
+    for d in adjusted:
+        if d["drill"].uuid == "drill-a":
+            a = d
+        elif d["drill"].uuid == "drill-b":
+            b = d
+
+    assert a is not None, "Drill A not found"
+    assert b is not None, "Drill B not found"
+
+    assert a["freshness_multiplier"] < 1.0
+    assert b["freshness_multiplier"] == 1.0
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v", "-s"]) 
