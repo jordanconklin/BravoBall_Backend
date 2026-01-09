@@ -256,9 +256,6 @@ def format_session_for_frontend(session, db: Session, user_id: int) -> Dict[str,
                 },
                 "video_url": drill.video_url,
                 "is_custom": is_custom,  # ✅ Add is_custom field
-                # Diagnostics: freshness and adjusted total score (if available)
-                "freshness_multiplier": getattr(session, '_drill_scores', {}).get(str(drill.uuid), {}).get('freshness_multiplier'),
-                "total_score": getattr(session, '_drill_scores', {}).get(str(drill.uuid), {}).get('total_score')
             }
             drills.append(drill_data)
 
@@ -280,7 +277,6 @@ def format_session_for_frontend(session, db: Session, user_id: int) -> Dict[str,
         "focus_areas": focus_areas,
         "drills": drills
     }
-
 
 @router.get("/api/session/debug_scores")
 async def debug_session_scores(

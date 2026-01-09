@@ -13,7 +13,7 @@ import sys
 from pathlib import Path
 import pytest
 from datetime import datetime
-from config import get_logger
+from ..config import get_logger
 
 logger = get_logger(__name__)
 
