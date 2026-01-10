@@ -523,7 +523,7 @@ class SessionGenerator:
                 # Compute days ago; allow fractional days but limit to [0, window_days)
                 if not session.date:
                     continue
-                days_ago = (datetime.now() - session.date).days
+                days_ago = (datetime.now() - session.date).total_seconds() / 86400.0
                 if days_ago >= window_days:
                     continue
                 weight = max(0.0, (window_days - days_ago) / float(window_days))
@@ -577,10 +577,6 @@ class SessionGenerator:
                 rd['total_score'] = rd.get('total_score', 0.0) * multiplier
                 rd.setdefault('freshness_multiplier', multiplier)
                 
-                logger.info(f" Freshness: drill={getattr(drill, 'title', drill_uuid)} "
-                f"recency={recency_score:.2f} normalized={normalized:.2f} "
-                f"multiplier={multiplier:.2f} total={rd['total_score']:.3f}")
-
             except Exception:
                 rd.setdefault('freshness_multiplier', 1.0)
 
