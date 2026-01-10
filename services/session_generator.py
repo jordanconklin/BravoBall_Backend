@@ -106,19 +106,6 @@ class SessionGenerator:
         current_duration = 0
         has_limited_equipment = len(preferences.available_equipment) <= 1
 
-        # Collect scoring details for selected drills so we can expose them later
-        drill_score_map: Dict[str, Dict] = {}
-        for rd in selected_drills:
-            try:
-                d = rd.get('drill')
-                uuid = str(getattr(d, 'uuid', None))
-                drill_score_map[uuid] = {
-                    'total_score': float(rd.get('total_score', rd.get('scores', {}).get('total', 0.0))),
-                    'freshness_multiplier': float(rd.get('freshness_multiplier', 1.0))
-                }
-            except Exception:
-                continue
-
         # Process the balanced selection of drills
         for ranked_drill in selected_drills:
             drill = ranked_drill['drill']
